@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30621.155
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MoverCandidateTest", "MoverCandidateTest\MoverCandidateTest.csproj", "{9AE7C62A-DC64-4B40-B9AC-C562D81D80CA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WatchHandsCalculatorsTests", "WatchHandsCalculatorsTests\WatchHandsCalculatorsTests.csproj", "{83440E92-E05E-4997-8FF5-68166D25AE40}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9AE7C62A-DC64-4B40-B9AC-C562D81D80CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9AE7C62A-DC64-4B40-B9AC-C562D81D80CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9AE7C62A-DC64-4B40-B9AC-C562D81D80CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9AE7C62A-DC64-4B40-B9AC-C562D81D80CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83440E92-E05E-4997-8FF5-68166D25AE40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83440E92-E05E-4997-8FF5-68166D25AE40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83440E92-E05E-4997-8FF5-68166D25AE40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83440E92-E05E-4997-8FF5-68166D25AE40}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7BD85020-EA4F-4E34-AB20-38BB72929759}
+	EndGlobalSection
+EndGlobal
