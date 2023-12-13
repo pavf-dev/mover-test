@@ -28,7 +28,7 @@ public class InventoryItemsController : ControllerBase
     public ActionResult CreateOrUpdateInventoryItem([FromBody]CreateOrUpdateInventoryItemRequest request)
     {
         var result = _inventoryItemsService.CreateOrUpdate(new InventoryItemDto(Sku: request.Sku, Description: request.Description, request.Quantity));
-
+        
         if (result.IsFailed)
         {
             return BadRequest(new RequestResult(result.Errors.Select(x => x.Message).ToArray()));
