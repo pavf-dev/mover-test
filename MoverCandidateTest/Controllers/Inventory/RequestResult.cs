@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace MoverCandidateTest.Controllers.Inventory;
 
@@ -9,12 +10,12 @@ public class RequestResult
         Errors = Array.Empty<string>();
     }
     
-    public RequestResult(string[] errors)
+    public RequestResult(IEnumerable<string> errors)
     {
         Errors = errors;
     }
     
-    public string[] Errors { get; }
+    public IEnumerable<string> Errors { get; }
 }
 
 public class RequestResult<T> : RequestResult

@@ -1,76 +1,132 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using FluentResults;
+using MoverCandidateTest.Application.Events;
 using MoverCandidateTest.Domain;
 
 namespace MoverCandidateTest.Application.InventoryItems;
 
-public class InventoryItemsService
+public partial class InventoryItemsService
 {
-    private readonly IInventoryItemsRepository _repository;
+    private readonly IInventoryDomainEventsRepository _inventoryEventsRepository;
     
-    public InventoryItemsService(IInventoryItemsRepository repository)
+    public InventoryItemsService(IInventoryDomainEventsRepository inventoryEventsRepository)
     {
-        _repository = repository;
+        _inventoryEventsRepository = inventoryEventsRepository;
     }
 
-    public IEnumerable<InventoryItemDto> GetAll()
+    public Result<IEnumerable<InventoryItemDto>> GetAll()
     {
-        var allItems = _repository.GetAll();
-
-        return allItems
-            .Select(x => new InventoryItemDto(Sku: x.Sku, Description: x.Description, x.Quantity))
-            .ToArray();
+        var allEvents = _inventoryEventsRepository.GetAll();
+        var allInventoryItem = new List<InventoryItemDto>(allEvents.Keys.Count());
+        var errors = new List<string>();
+        
+        foreach (var sku in allEvents.Keys)
+        {
+            var inventoryItem = new InventoryItemAggregate();
+            var result = inventoryItem.Apply(allEvents[sku]);
+            
+            if (result.IsFailed)
+            {
+                errors.Add($"Could not restore the state for {sku}"); 
+            }
+            else
+            {
+                allInventoryItem.Add(new InventoryItemDto(Sku: inventoryItem.Sku, Description: inventoryItem.Description, inventoryItem.Quantity));
+            }
+        }
+        
+        if (errors.Any()) return Result.Fail(errors);
+        
+        return Result.Ok((IEnumerable<InventoryItemDto>)allInventoryItem);
     }
 
-    public Result CreateOrUpdate(InventoryItemDto inventoryItemDto)
+    public async Task<Result> CreateOrUpdate(InventoryItemDto inventoryItemDto, Guid eventId)
     {
         var validationResult = Validate(inventoryItemDto);
 
-        if (validationResult.Count > 0) return Result.Fail(validationResult);
-        
-        var existingInventoryItem = _repository.Get(inventoryItemDto.Sku);
+        if (validationResult.IsFailed) return validationResult;
 
-        if (existingInventoryItem is not null)
+        var inventoryEvents = _inventoryEventsRepository.GetAll(inventoryItemDto.Sku).ToArray();
+        var inventoryItem = new InventoryItemAggregate();
+        
+        if (inventoryEvents.Any())
         {
-            var updatedItemDto = existingInventoryItem with
+            var result = inventoryItem.Apply(inventoryEvents);
+
+            if (result.IsFailed)
             {
-                Description = inventoryItemDto.Description,
-                Quantity = existingInventoryItem.Quantity + inventoryItemDto.Quantity
-            };
+                return Result.Fail($"Could not restore the state for {inventoryItemDto.Sku}"); 
+            }
+
+            var addQuantityResult = inventoryItem.AddQuantity(eventId, inventoryItemDto.Quantity);
+
+            if (addQuantityResult.IsFailed)
+            {
+                return Result.Fail(addQuantityResult.Errors);
+            }
             
-            _repository.Update(updatedItemDto);
-            
-            return Result.Ok();
+            return await SaveEvent(inventoryItem.Sku, addQuantityResult.Value);
         }
 
-        var newInventoryItem = new InventoryItem(Sku: inventoryItemDto.Sku, Description: inventoryItemDto.Description,
-            inventoryItemDto.Quantity);
+        var initResult = inventoryItem.InitNew(
+            eventId: eventId,
+            sku: inventoryItemDto.Sku,
+            description: inventoryItemDto.Description,
+            quantity: inventoryItemDto.Quantity);
         
-        _repository.Add(newInventoryItem);
-        
-        return Result.Ok();
+        if (initResult.IsFailed)
+        {
+            return Result.Fail(initResult.Errors);
+        }
+
+        return await SaveEvent(inventoryItem.Sku, initResult.Value);
     }
 
-    private List<string> Validate(InventoryItemDto dto)
+    private async Task<Result> SaveEvent(string partitionKey, InventoryItemDomainEvent @event)
     {
-        var validationErrors = new List<string>();
+        var saveResult = await _inventoryEventsRepository.Add(partitionKey, @event);
+
+        if (saveResult.IsSuccess) return Result.Ok();
+        
+        if (saveResult.HasError<UniqueKeyConstrainViolationErrorResult>())
+        {
+            var error = saveResult.Errors.Single() as UniqueKeyConstrainViolationErrorResult;
+
+            var returnResult = error.PropertyName switch
+            {
+                nameof(InventoryItemDomainEvent.Id) => new RequestIsAlreadyProcessed(),
+                nameof(InventoryItemDomainEvent.SequenceNumber) => new InventoryItemUpdateConflict(),
+                _ => new Error($"Unique of {error.PropertyName} is violated")
+            };
+
+            return Result.Fail(returnResult);
+        }
+
+        return Result.Fail(saveResult.Errors);
+    }
+    
+    private Result Validate(InventoryItemDto dto)
+    {
+        var result = new Result();
         
         if (string.IsNullOrEmpty(dto.Sku))
         {
-            validationErrors.Add("Sku must not be empty");
+            result.WithError(new ValidationError("Sku must not be empty"));
         }
 
         if (string.IsNullOrEmpty(dto.Description))
         {
-            validationErrors.Add("Description must not be empty");
+            result.WithError(new ValidationError("Description must not be empty"));
         }
 
         if (dto.Quantity < 0)
         {
-            validationErrors.Add("Quantity must be equal to or greater than 0");
+            result.WithError(new ValidationError("Quantity must be equal to or greater than 0"));
         }
 
-        return validationErrors;
+        return result;
     }
 }

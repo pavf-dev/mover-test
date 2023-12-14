@@ -8,7 +8,12 @@ namespace MoverCandidateTest.Application.InventoryItems;
 public class InventoryItemAggregate
 {
     private int _sequenceNumber;
-    private List<InventoryItemDomainEvent> _domainEvents;
+    private readonly List<InventoryItemDomainEvent> _domainEvents;
+
+    public InventoryItemAggregate()
+    {
+        _domainEvents = new List<InventoryItemDomainEvent>();
+    }
     
     public string Sku { get; private set; }
     
@@ -37,14 +42,14 @@ public class InventoryItemAggregate
         return @event;
     }
 
-    public Result<InventoryItemDomainEvent<InventoryQuantityIncreased>> AddQuantity(Guid eventId, decimal quantity)
+    public Result<InventoryItemDomainEvent<InventoryItemQuantityIncreasedData>> AddQuantity(Guid eventId, decimal quantity)
     {
-        var @event = new InventoryItemDomainEvent<InventoryQuantityIncreased>(
+        var @event = new InventoryItemDomainEvent<InventoryItemQuantityIncreasedData>(
             id: eventId,
             sequenceNumber: _sequenceNumber + 1,
             timestamp: DateTime.Now,
             type: InventoryDomainEventType.QuantityIncreased,
-            data: new InventoryQuantityIncreased(quantity));
+            data: new InventoryItemQuantityIncreasedData(quantity));
      
         var result = Apply(@event);
 
@@ -56,7 +61,38 @@ public class InventoryItemAggregate
         return @event;
     }
     
-    public Result Apply(InventoryItemDomainEvent @event)
+    public Result<InventoryItemDomainEvent<InventoryItemQuantityIncreasedData>> DecreaseQuantity(Guid eventId, decimal quantity)
+    {
+        var @event = new InventoryItemDomainEvent<InventoryItemQuantityIncreasedData>(
+            id: eventId,
+            sequenceNumber: _sequenceNumber + 1,
+            timestamp: DateTime.Now,
+            type: InventoryDomainEventType.QuantityDecreased,
+            data: new InventoryItemQuantityIncreasedData(quantity));
+     
+        var result = Apply(@event);
+
+        if (result.IsFailed)
+        {
+            return result;
+        }
+        
+        return @event;
+    }
+
+    public Result Apply(IEnumerable<InventoryItemDomainEvent> events)
+    {
+        foreach (var @event in events)
+        {
+            var result = Apply(@event);
+
+            if (result.IsFailed) return result;
+        }
+        
+        return Result.Ok();
+    }
+    
+    private Result Apply(InventoryItemDomainEvent @event)
     {
         if (@event.SequenceNumber != _sequenceNumber + 1)
         {
@@ -64,41 +100,21 @@ public class InventoryItemAggregate
         }
 
         _sequenceNumber = @event.SequenceNumber;
-        
-        switch (@event.Type)
+
+        var result =  @event.Type switch
         {
-            case InventoryDomainEventType.ItemAdded:
-                return Create(@event);
+            InventoryDomainEventType.ItemAdded => Create(@event),
+            InventoryDomainEventType.QuantityIncreased => IncreaseQuantity(@event),
+            InventoryDomainEventType.QuantityDecreased => DecreaseQuantity(@event),
+            _ => Result.Fail($"Event type {@event.Type} was out of range of known values")
+        };
 
-            case InventoryDomainEventType.QuantityIncreased:
-                return IncreaseQuantity(@event);
-
-            case InventoryDomainEventType.QuantityReduced:
-                break;
-            default:
-                return Result.Fail($"Event type {@event.Type} was out of range of known values");
-        }
-        
-        _domainEvents.Add(@event);
-
-        return Result.Ok();
-    }
-
-    private Result IncreaseQuantity(InventoryItemDomainEvent @event)
-    {
-        if (@event is not InventoryItemDomainEvent<InventoryQuantityIncreased> eventWithData)
+        if (result.IsSuccess)
         {
-            return Result.Fail($"Could cast to type {nameof(InventoryItemDomainEvent<InventoryQuantityIncreased>)}");
-        }
-        
-        if (eventWithData.Data.Quantity <= 0)
-        {
-            return Result.Fail($"Increase quantity must be positive. It was {eventWithData.Data.Quantity}");
+            _domainEvents.Add(@event);
         }
 
-        Quantity += eventWithData.Data.Quantity;
-        
-        return Result.Ok();
+        return result;
     }
 
     private Result Create(InventoryItemDomainEvent @event)
@@ -110,12 +126,57 @@ public class InventoryItemAggregate
 
         if (@event is not InventoryItemDomainEvent<InventoryItemAddedData> eventWithData)
         {
-            return Result.Fail($"Could cast to type {nameof(InventoryItemDomainEvent<InventoryItemAddedData>)}");
+            return Result.Fail($"Could not cast to type {nameof(InventoryItemDomainEvent<InventoryItemAddedData>)}");
         }
 
+        if (eventWithData.Data.Quantity < 0)
+        {
+            return Result.Fail($"Can't initialize inventory item with negative quantity. It was {eventWithData.Data.Quantity}");
+        }
+
+        
         Sku = eventWithData.Data.Sku;
         Description = eventWithData.Data.Description;
         Quantity = eventWithData.Data.Quantity;
+        
+        return Result.Ok();
+    }
+
+    private Result IncreaseQuantity(InventoryItemDomainEvent @event)
+    {
+        if (@event is not InventoryItemDomainEvent<InventoryItemQuantityIncreasedData> eventWithData)
+        {
+            return Result.Fail($"Could not cast to type {nameof(InventoryItemDomainEvent<InventoryItemQuantityIncreasedData>)}");
+        }
+        
+        if (eventWithData.Data.Quantity <= 0)
+        {
+            return Result.Fail($"Increase quantity must be positive. It was {eventWithData.Data.Quantity}");
+        }
+
+        Quantity += eventWithData.Data.Quantity;
+        
+        return Result.Ok();
+    }
+    
+    private Result DecreaseQuantity(InventoryItemDomainEvent @event)
+    {
+        if (@event is not InventoryItemDomainEvent<InventoryItemQuantityDecreasedData> eventWithData)
+        {
+            return Result.Fail($"Could not cast to type {nameof(InventoryItemDomainEvent<InventoryItemQuantityDecreasedData>)}");
+        }
+        
+        if (eventWithData.Data.Quantity <= 0)
+        {
+            return Result.Fail($"Decrease quantity must be positive. It was {eventWithData.Data.Quantity}");
+        }
+
+        if (Quantity < eventWithData.Data.Quantity)
+        {
+            return Result.Fail($"Can't reduce quantity by {eventWithData.Data.Quantity} because currently available quantity is {Quantity}");
+        }
+        
+        Quantity -= eventWithData.Data.Quantity;
         
         return Result.Ok();
     }

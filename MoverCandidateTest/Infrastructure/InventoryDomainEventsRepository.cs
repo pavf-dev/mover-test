@@ -15,9 +15,9 @@ public class InventoryDomainEventsRepository : IInventoryDomainEventsRepository
     private readonly SemaphoreSlim _semaphore = new(1);
     private readonly ConcurrentDictionary<string, List<InventoryItemDomainEvent>> _database = new();
 
-    public IEnumerable<InventoryItemDomainEvent> GetAll()
+    public IReadOnlyDictionary<string, List<InventoryItemDomainEvent>> GetAll()
     {
-        return _database.Values.SelectMany(x => x);
+        return _database.ToDictionary(x => x.Key, x => x.Value);
     }
 
     public IEnumerable<InventoryItemDomainEvent> GetAll(string partitionKey)
@@ -35,11 +35,16 @@ public class InventoryDomainEventsRepository : IInventoryDomainEventsRepository
             
             try
             {
-                if (list.Any(x => x.Id == item.Id || x.SequenceNumber == item.SequenceNumber))
+                if (list.Any(x => x.Id == item.Id))
                 {
-                    return Result.Fail(new UniquenessViolatedErrorResult());
+                    return Result.Fail(new UniqueKeyConstrainViolationErrorResult(nameof(InventoryItemDomainEvent.Id)));
                 }
 
+                if (list.Any(x => x.SequenceNumber == item.SequenceNumber))
+                {
+                    return Result.Fail(new UniqueKeyConstrainViolationErrorResult(nameof(InventoryItemDomainEvent.SequenceNumber)));
+                }
+                
                 list.Add(item);
             }
             finally
@@ -50,11 +55,11 @@ public class InventoryDomainEventsRepository : IInventoryDomainEventsRepository
             return Result.Ok();
         }
 
-        var newList = new List<InventoryItemDomainEvent> {item};
+        var newList = new List<InventoryItemDomainEvent> { item };
         
         if (!_database.TryAdd(partitionKey, newList))
         {
-            return Result.Fail(new UniquenessViolatedErrorResult()); 
+            return Result.Fail(new UniqueKeyConstrainViolationErrorResult(partitionKey)); 
         }
         
         return Result.Ok();

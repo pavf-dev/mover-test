@@ -36,7 +36,7 @@ public enum InventoryDomainEventType
 {
     ItemAdded = 1,
     QuantityIncreased,
-    QuantityReduced
+    QuantityDecreased
 }
 
 public class InventoryItemAddedData
@@ -55,9 +55,19 @@ public class InventoryItemAddedData
     public decimal Quantity { get; }
 }
 
-public class InventoryQuantityIncreased
+public class InventoryItemQuantityIncreasedData
 {
-    public InventoryQuantityIncreased(decimal quantity)
+    public InventoryItemQuantityIncreasedData(decimal quantity)
+    {
+        Quantity = quantity;
+    }
+
+    public decimal Quantity { get; }
+}
+
+public class InventoryItemQuantityDecreasedData
+{
+    public InventoryItemQuantityDecreasedData(decimal quantity)
     {
         Quantity = quantity;
     }

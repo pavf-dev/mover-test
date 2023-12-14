@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MoverCandidateTest.Application.Events;
 using MoverCandidateTest.Application.InventoryItems;
 using MoverCandidateTest.Application.WatchHands;
 using MoverCandidateTest.Infrastructure;
@@ -24,7 +25,7 @@ namespace MoverCandidateTest
             services.AddControllers();
             services.AddSingleton<IWatchHandsAngleCalculator, WatchHandsAngleCalculator>();
             services.AddSingleton<WatchHandsAngleDifferenceCalculator>();
-            services.AddSingleton<IInventoryItemsRepository, InventoryItemsRepository>();
+            services.AddSingleton<IInventoryDomainEventsRepository, InventoryDomainEventsRepository>();
             services.AddSingleton<InventoryItemsService>();
         }
 

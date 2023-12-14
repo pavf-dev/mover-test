@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using MoverCandidateTest.Application.InventoryItems;
 
@@ -19,26 +22,42 @@ public class InventoryItemsController : ControllerBase
     [HttpGet]
     public ActionResult<RequestResult<IEnumerable<InventoryItemDto>>> ListInventoryItems()
     {
-        var items = _inventoryItemsService.GetAll();
-        
-        return Ok(new RequestResult<IEnumerable<InventoryItemDto>>(items));
+        var getAllResult = _inventoryItemsService.GetAll();
+
+        if (getAllResult.IsFailed) return StatusCode(500, new RequestResult(getAllResult.Errors.Select(s => s.Message)));
+
+        return Ok(new RequestResult<IEnumerable<InventoryItemDto>>(getAllResult.Value));
     }
     
-    [HttpPost]
-    public ActionResult CreateOrUpdateInventoryItem([FromBody]CreateOrUpdateInventoryItemRequest request)
+    [HttpPut]
+    public async Task<ActionResult> CreateOrUpdateInventoryItem(
+        [Required][FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
+        [FromBody] CreateOrUpdateInventoryItemRequest request)
     {
-        var result = _inventoryItemsService.CreateOrUpdate(new InventoryItemDto(Sku: request.Sku, Description: request.Description, request.Quantity));
-        
-        if (result.IsFailed)
+        var result = await _inventoryItemsService.CreateOrUpdate(
+            new InventoryItemDto(Sku: request.Sku, Description: request.Description, request.Quantity), idempotencyKey);
+
+        if (result.IsSuccess) return NoContent();
+
+        if (result.HasError<InventoryItemsService.ValidationError>())
         {
-            return BadRequest(new RequestResult(result.Errors.Select(x => x.Message).ToArray()));
+            return UnprocessableEntity(new RequestResult(result.Errors.Select(x => x.Message)));
         }
         
-        return Ok();
+        if (result.HasError<InventoryItemsService.RequestIsAlreadyProcessed>() ||
+            result.HasError<InventoryItemsService.InventoryItemUpdateConflict>())
+        {
+            return Conflict();
+        }
+            
+        return StatusCode(500, new RequestResult(result.Errors.Select(s => s.Message)));
     }
     
-    [HttpPost("{sku}/reduce/{quantity}")]
-    public ActionResult ReduceQuantity([FromRoute]string sku, [FromRoute] decimal quantity)
+    [HttpPut("{sku}/decrease/{quantity}")]
+    public ActionResult DecreaseQuantity(
+        [Required][FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
+        [FromRoute]string sku,
+        [FromRoute] decimal quantity)
     {
         return Ok();
     }
