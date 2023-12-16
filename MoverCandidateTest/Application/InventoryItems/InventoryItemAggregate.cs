@@ -80,7 +80,7 @@ public class InventoryItemAggregate
         return @event;
     }
 
-    public Result Apply(IEnumerable<InventoryItemDomainEvent> events)
+    public Result RestoreStateFrom(IEnumerable<InventoryItemDomainEvent> events)
     {
         foreach (var @event in events)
         {
@@ -96,7 +96,7 @@ public class InventoryItemAggregate
     {
         if (@event.SequenceNumber != _sequenceNumber + 1)
         {
-            throw new ApplicationException();
+            Result.Fail($"Could not restore the state because the event sequence number '{@event.SequenceNumber}' is out of order.");
         }
 
         _sequenceNumber = @event.SequenceNumber;
@@ -124,6 +124,11 @@ public class InventoryItemAggregate
             return Result.Fail("Create event must have sequence number 1");
         }
 
+        if (_domainEvents.Count != 0)
+        {
+            return Result.Fail($"{Sku} was already initialized before");
+        }
+        
         if (@event is not InventoryItemDomainEvent<InventoryItemAddedData> eventWithData)
         {
             return Result.Fail($"Could not cast to type {nameof(InventoryItemDomainEvent<InventoryItemAddedData>)}");

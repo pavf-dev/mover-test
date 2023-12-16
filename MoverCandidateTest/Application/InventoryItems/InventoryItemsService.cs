@@ -11,10 +11,13 @@ namespace MoverCandidateTest.Application.InventoryItems;
 public partial class InventoryItemsService
 {
     private readonly IInventoryDomainEventsRepository _inventoryEventsRepository;
-    
-    public InventoryItemsService(IInventoryDomainEventsRepository inventoryEventsRepository)
+    private readonly IInventoryItemDtoValidator _dtoValidator;
+
+    public InventoryItemsService(IInventoryDomainEventsRepository inventoryEventsRepository,
+        IInventoryItemDtoValidator dtoValidator)
     {
         _inventoryEventsRepository = inventoryEventsRepository;
+        _dtoValidator = dtoValidator;
     }
 
     public Result<IEnumerable<InventoryItemDto>> GetAll()
@@ -26,7 +29,7 @@ public partial class InventoryItemsService
         foreach (var sku in allEvents.Keys)
         {
             var inventoryItem = new InventoryItemAggregate();
-            var result = inventoryItem.Apply(allEvents[sku]);
+            var result = inventoryItem.RestoreStateFrom(allEvents[sku]);
             
             if (result.IsFailed)
             {
@@ -45,16 +48,16 @@ public partial class InventoryItemsService
 
     public async Task<Result> CreateOrUpdate(InventoryItemDto inventoryItemDto, Guid eventId)
     {
-        var validationResult = Validate(inventoryItemDto);
+        var validationResult = _dtoValidator.Validate(inventoryItemDto).ToList();
 
-        if (validationResult.IsFailed) return validationResult;
+        if (validationResult.Any()) return Result.Fail(validationResult.Select(x => new ValidationError(x)));
 
         var inventoryEvents = _inventoryEventsRepository.GetAll(inventoryItemDto.Sku).ToArray();
         var inventoryItem = new InventoryItemAggregate();
         
         if (inventoryEvents.Any())
         {
-            var result = inventoryItem.Apply(inventoryEvents);
+            var result = inventoryItem.RestoreStateFrom(inventoryEvents);
 
             if (result.IsFailed)
             {
@@ -90,43 +93,21 @@ public partial class InventoryItemsService
         var saveResult = await _inventoryEventsRepository.Add(partitionKey, @event);
 
         if (saveResult.IsSuccess) return Result.Ok();
+
+        if (!saveResult.HasError<UniqueKeyConstrainViolationErrorResult>())
+        {
+            return Result.Fail(saveResult.Errors);
+        }
         
-        if (saveResult.HasError<UniqueKeyConstrainViolationErrorResult>())
+        var error = saveResult.Errors.Single() as UniqueKeyConstrainViolationErrorResult;
+
+        var returnResult = error.PropertyName switch
         {
-            var error = saveResult.Errors.Single() as UniqueKeyConstrainViolationErrorResult;
+            nameof(InventoryItemDomainEvent.Id) => new RequestIsAlreadyProcessed(),
+            nameof(InventoryItemDomainEvent.SequenceNumber) => new InventoryItemUpdateConflict(),
+            _ => new Error($"Unique of {error.PropertyName} is violated")
+        };
 
-            var returnResult = error.PropertyName switch
-            {
-                nameof(InventoryItemDomainEvent.Id) => new RequestIsAlreadyProcessed(),
-                nameof(InventoryItemDomainEvent.SequenceNumber) => new InventoryItemUpdateConflict(),
-                _ => new Error($"Unique of {error.PropertyName} is violated")
-            };
-
-            return Result.Fail(returnResult);
-        }
-
-        return Result.Fail(saveResult.Errors);
-    }
-    
-    private Result Validate(InventoryItemDto dto)
-    {
-        var result = new Result();
-        
-        if (string.IsNullOrEmpty(dto.Sku))
-        {
-            result.WithError(new ValidationError("Sku must not be empty"));
-        }
-
-        if (string.IsNullOrEmpty(dto.Description))
-        {
-            result.WithError(new ValidationError("Description must not be empty"));
-        }
-
-        if (dto.Quantity < 0)
-        {
-            result.WithError(new ValidationError("Quantity must be equal to or greater than 0"));
-        }
-
-        return result;
+        return Result.Fail(returnResult);
     }
 }

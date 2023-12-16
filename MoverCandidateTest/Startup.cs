@@ -26,6 +26,7 @@ namespace MoverCandidateTest
             services.AddSingleton<IWatchHandsAngleCalculator, WatchHandsAngleCalculator>();
             services.AddSingleton<WatchHandsAngleDifferenceCalculator>();
             services.AddSingleton<IInventoryDomainEventsRepository, InventoryDomainEventsRepository>();
+            services.AddSingleton<IInventoryItemDtoValidator, InventoryItemDtoValidator>();
             services.AddSingleton<InventoryItemsService>();
         }
 

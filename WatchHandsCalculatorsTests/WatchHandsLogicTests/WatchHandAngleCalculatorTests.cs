@@ -2,7 +2,7 @@
 using MoverCandidateTest.Application.WatchHands;
 using NUnit.Framework;
 
-namespace WatchHandsCalculatorsTests;
+namespace WatchHandsCalculatorsTests.WatchHandsLogicTests;
 
 public class WatchHandAngleCalculatorTests
 {

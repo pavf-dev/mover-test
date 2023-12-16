@@ -56,7 +56,7 @@ public class InventoryItemsController : ControllerBase
     [HttpPut("{sku}/decrease/{quantity}")]
     public ActionResult DecreaseQuantity(
         [Required][FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
-        [FromRoute]string sku,
+        [FromRoute] string sku,
         [FromRoute] decimal quantity)
     {
         return Ok();
